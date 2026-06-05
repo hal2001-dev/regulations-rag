@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: regulations-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-regulations}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-regulations}
+      POSTGRES_DB: ${POSTGRES_DB:-regulations}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - ./data/pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-regulations} -d ${POSTGRES_DB:-regulations}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: regulations-qdrant
+    restart: unless-stopped
+    ports:
+      - "6433:6333"   # REST  (host 6433 → container 6333)
+      - "6434:6334"   # gRPC
+    volumes:
+      - ./data/qdrant_storage:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/6333' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10

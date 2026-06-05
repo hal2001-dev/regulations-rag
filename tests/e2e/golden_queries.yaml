@@ -1,0 +1,139 @@
+# Golden queries for M6 eval. 총 30개 — policy×15, authority×10, manual×5.
+# 각 쿼리는 expected route + (가능한 경우) expected_doc_id + 기대 키워드를 함께 둠.
+#
+# 사용처:
+#   - scripts/eval_ragas.py: top-1 doc_id 정확도, route accuracy, citation valid, latency p95,
+#     answer faithfulness (ragas).
+#   - 회귀 골든셋: M5 후속 prompt 튜닝 시 변동 확인.
+
+defaults:
+  expected_route: policy
+
+queries:
+  # ── policy (조항 retrieval) ───────────────────────────────────────────
+  - id: P01
+    question: "내부회계관리규정 제5조의 내용을 설명해줘"
+    expected_doc_id: 11
+    expected_keywords: ["내부회계관리", "제5조"]
+  - id: P02
+    question: "상임이사 보수의 종류는 무엇이 있나?"
+    expected_doc_id: 2
+    expected_keywords: ["보수", "기본급"]
+  - id: P03
+    question: "회계규정에서 회계연도의 정의는?"
+    expected_doc_id: 3
+    expected_keywords: ["회계년도", "회계연도"]
+  - id: P04
+    question: "감사규정의 목적이 뭐야?"
+    expected_doc_id: 4
+    expected_keywords: ["감사", "목적"]
+  - id: P05
+    question: "경비업무규정에 따른 경비원의 의무는?"
+    expected_doc_id: 6
+    expected_keywords: ["경비", "의무"]
+  - id: P06
+    question: "여비규정의 일비 기준은?"
+    expected_doc_id: 14
+    expected_keywords: ["여비", "일비"]
+  - id: P07
+    question: "인사관리규정에서 연차휴가는 어떻게 산정해?"
+    expected_doc_id: 17
+    expected_keywords: ["인사", "연차"]
+  - id: P08
+    question: "이사회 내 위원회 운영규정에 따른 위원 임기는?"
+    expected_doc_id: 16
+    expected_keywords: ["위원", "임기"]
+  - id: P09
+    question: "영업규정에서 대리점 계약은 어떻게 체결해?"
+    expected_doc_id: 15
+    expected_keywords: ["영업", "대리점"]
+  - id: P10
+    question: "계약심사 시행내규의 심의 대상은?"
+    expected_doc_id: 7
+    expected_keywords: ["계약심사", "심의"]
+  - id: P11
+    question: "퇴직금 지급제한이 적용되는 경우는?"
+    expected_doc_id: 2
+    expected_keywords: ["퇴직금", "지급제한"]
+  - id: P12
+    question: "성과급 산정 방식이 어떻게 돼?"
+    expected_doc_id: 2
+    expected_keywords: ["성과급"]
+  - id: P13
+    question: "회계규정에서 자본적 지출과 수익적 지출의 구분 기준은?"
+    expected_doc_id: 3
+    expected_keywords: ["자본적", "수익적"]
+  - id: P14
+    question: "감사 결과는 누구에게 보고해야 해?"
+    expected_doc_id: 4
+    expected_keywords: ["감사", "보고"]
+  - id: P15
+    question: "휴직기간 중 보수는 어떻게 지급돼?"
+    expected_doc_id: 2
+    expected_keywords: ["휴직", "보수"]
+
+  # ── authority (위임전결 — SQL exact) ────────────────────────────────
+  - id: A01
+    question: "3천만원짜리 계약 누가 결재하나요?"
+    expected_route: authority
+    expected_keywords: ["3,000만원", "30,000,000", "3천만", "부서장", "팀장", "사장"]
+  - id: A02
+    question: "5천만원 한도 결재권자는?"
+    expected_route: authority
+    expected_keywords: ["5천만", "50,000,000", "부서장", "사장"]
+  - id: A03
+    question: "1억원 계약 결재 권한"
+    expected_route: authority
+    expected_keywords: ["1억", "100,000,000", "사장", "부서장"]
+  - id: A04
+    question: "2천만원 한도 누가 승인?"
+    expected_route: authority
+    expected_keywords: ["2천만", "20,000,000", "부서장"]
+  - id: A05
+    question: "1천만원 이하 결재"
+    expected_route: authority
+    expected_keywords: ["1천만", "10,000,000", "부서장", "팀장"]
+  - id: A06
+    question: "5억원 계약 결재권자"
+    expected_route: authority
+    expected_keywords: ["5억", "500,000,000", "사장"]
+  - id: A07
+    question: "사무위임전결규정에 따른 부서장 한도가 얼마야?"
+    expected_route: authority
+    expected_doc_id: 12
+    expected_keywords: ["부서장", "한도"]
+  - id: A08
+    question: "신천초 위임전결 규정에서 교장 권한 범위"
+    expected_route: authority
+    expected_doc_id: 13
+    expected_keywords: ["교장", "위임", "신천초"]
+  - id: A09
+    question: "예산 5천만원 결재 누가 해?"
+    expected_route: authority
+    expected_keywords: ["5천만", "50,000,000", "부서장"]
+  - id: A10
+    question: "팀장 전결 한도는?"
+    expected_route: authority
+    expected_keywords: ["팀장", "한도", "전결"]
+
+  # ── manual / faq ────────────────────────────────────────────────────
+  - id: M01
+    question: "교육활동 보호 매뉴얼에서 학생 폭언 대응 절차"
+    expected_doc_id: 9
+    expected_keywords: ["교육활동", "보호", "대응"]
+  - id: M02
+    question: "교권 침해 신고 절차는 어떻게 돼?"
+    expected_doc_id: 9
+    expected_keywords: ["교권", "침해", "신고"]
+  - id: M03
+    question: "자치법규 입법 절차를 단계별로 설명"
+    expected_doc_id: 18
+    expected_keywords: ["자치법규", "입법", "절차"]
+  - id: M04
+    question: "조례 개정 시 의회 송부 시점은?"
+    expected_doc_id: 18
+    expected_keywords: ["조례", "의회"]
+  - id: M05
+    question: "교원 상담 매뉴얼의 비밀유지 의무"
+    expected_doc_id: 9
+    expected_keywords: ["상담", "비밀"]

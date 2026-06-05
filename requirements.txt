@@ -1,0 +1,39 @@
+# === Web / API ===
+fastapi>=0.115,<0.116
+uvicorn[standard]>=0.32,<0.33
+pydantic>=2.9,<3
+pydantic-settings>=2.6,<3
+
+# === DB / ORM ===
+sqlalchemy>=2.0.36,<3
+psycopg[binary,pool]>=3.2,<4
+alembic>=1.14,<2  # M2 이후 schema 변경 대비 (M1 은 create_all 사용)
+
+# === Vector store ===
+qdrant-client>=1.12,<2
+
+# === Embedding / sparse / rerank ===
+fastembed>=0.7,<0.9      # bge-m3 dense + bm25 (Python 3.14 호환은 0.7+ 부터)
+kiwipiepy>=0.18,<0.22    # 한국어 형태소
+
+# === LLM orchestration ===
+langgraph>=0.2.50,<0.3
+langgraph-checkpoint-postgres>=2.0,<3
+langchain-core>=0.3,<0.4
+langchain-openai>=0.2,<0.3
+
+# === PDF / OCR ===
+docling>=2.10,<3
+langchain-docling>=0.1,<0.2
+
+# === Eval ===
+ragas>=0.2,<0.3
+
+# === SSE / HTTP (테스트 클라이언트) ===
+httpx>=0.28,<0.29
+httpx-sse>=0.4,<0.5
+
+# === 보조 ===
+python-multipart>=0.0.20  # FastAPI 멀티파트 업로드
+loguru>=0.7,<0.8
+tenacity>=9,<10

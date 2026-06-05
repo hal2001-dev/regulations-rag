@@ -1,0 +1,11 @@
+# M1 부팅 검증용 최소 의존성 (전체 requirements.txt 는 M2 진입 시 설치).
+# 여기 패키지만 있어도: docker compose 의 postgres 에 연결 + FastAPI /health + indexer_worker 큐 폴링 동작.
+
+fastapi>=0.115,<0.116
+uvicorn[standard]>=0.32,<0.33
+pydantic>=2.9,<3
+pydantic-settings>=2.6,<3
+sqlalchemy>=2.0.36,<3
+psycopg[binary,pool]>=3.2,<4
+loguru>=0.7,<0.8
+python-multipart>=0.0.20
