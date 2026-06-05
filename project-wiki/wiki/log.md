@@ -166,3 +166,10 @@
 - 위임전결 SQL 정확 조회(차별점 1) 정상 동작 복구. chunk(29개)는 1차 색인 때 이미 적재돼 있어 backfill 은 authority_rules 만 재생성.
 - 갱신 페이지: `features/authority_matrix.md`(blocked→active), `data/spec.md`, `overview.md`, `index.md`.
 - 출처: `scripts/backfill_authority.py`, `authority_rules` 테이블 측정
+
+## [2026-06-05] ingest | 신규 위키 페이지 — 규정 질의 정확도 확보 방법
+- 사용자 요청: "규정 및 제도 관점에서 질문에 대한 정확한 답변을 얻는 방법"을 위키로 정리.
+- 신규 페이지 `features/answer_accuracy.md` 작성 — 정확도 위험 5종(조항 절단/한도 hallucination/인용 깨짐/오검색/모호성) → 방어 6단계(조항 chunking·authority SQL·계층 인용·route 격리·clarify·컨텍스트 제약 생성+검증) 매핑 플레이북 + 질문 유형별 경로 + 사용자용 질문 작성 가이드. 기존 feature 페이지로 cross-link 만 하고 내용 중복 회피.
+- 현 정확도 표는 ADR-019(옛 17 PDF 30 query) 기준임을 명시 — 현 4 PDF eval 재작성이 선행 과제.
+- 갱신 페이지: `index.md`(카탈로그 + 날짜).
+- 출처: `features/{authority_matrix,citation,retrieval,generation}.md`, PRD §24

@@ -1,7 +1,7 @@
 # Wiki Index
 
 **상태**: active
-**마지막 업데이트**: 2026-06-05
+**마지막 업데이트**: 2026-06-05 (answer_accuracy.md 추가)
 
 wiki 내 모든 페이지의 단일 카탈로그. 새로운 페이지를 추가할 때마다 본 index 도 함께 갱신할 것. 답변/탐색 시 가장 먼저 읽는다.
 
@@ -32,6 +32,7 @@ wiki 내 모든 페이지의 단일 카탈로그. 새로운 페이지를 추가�
 - [features/generation.md](features/generation.md) — ✅ M3, gpt-4o-mini stream + 5-block prompt + citation_validator
 - [features/clarifier.md](features/clarifier.md) — ✅ M5, 4 패턴 LLM 감지 + interrupt_before + /query/resume (이 페이지는 향후 작성)
 - [features/evaluation.md](features/evaluation.md) — ✅ M6, 30 golden queries + KPI 자동 측정 + ragas 옵션. baseline 기록.
+- [features/answer_accuracy.md](features/answer_accuracy.md) — ★ 규정·제도 질의 정확도 확보 방법 (위험 5종 → 방어 6단계 플레이북 + 질문 작성 가이드)
 
 ## Data
 - [data/spec.md](data/spec.md) — 현재 4 PDF 데이터셋 (2026-06-05 교체, 옛 17 PDF 는 ingest/temp 보관) + doc_type 분류
