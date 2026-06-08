@@ -88,13 +88,16 @@ def _get_converter():
     return _converter
 
 
-def load_pdf_text(path: str | Path) -> LoadResult:
+def load_pdf_text(path: str | Path, save_md_dir: str | Path | None = None) -> LoadResult:
     """PDF → 정규화된 markdown text + 품질 라벨.
 
     품질 라벨:
         scan_only — text 가 거의 없음 (< 200 chars total)
         partial   — 페이지 수 대비 텍스트가 적음 (< 100 chars/page)
         ok        — 기본
+
+    save_md_dir 가 주어지면 정규화된 markdown 을 `<save_md_dir>/<stem>.md` 로 저장
+    (디버깅/재현/표 청킹 분석용 중간 산출물). Docling 변환이 느리므로 캐시 효과도 있음.
     """
     path = Path(path)
     if not path.exists():
@@ -107,6 +110,13 @@ def load_pdf_text(path: str | Path) -> LoadResult:
 
     md = doc.export_to_markdown()
     md = normalize_markdown(md)
+
+    if save_md_dir is not None:
+        out_dir = Path(save_md_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"{path.stem}.md"
+        out_path.write_text(md, encoding="utf-8")
+        log.info("Saved parsed markdown: {p} ({c} chars)", p=str(out_path), c=len(md))
 
     # 페이지 수 추정
     try:

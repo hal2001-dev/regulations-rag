@@ -30,8 +30,12 @@ pnpm-debug.log*
 !.env.example
 
 # Runtime data (docker volumes, vector store, sqlite, etc.)
-data/
+data/*
 !data/.gitkeep
+# 단, Docling 파싱 산출 markdown 은 추적 (디버깅/표 청킹 분석용)
+!data/parsed/
+data/parsed/*
+!data/parsed/*.md
 
 # Editors / OS
 .vscode/

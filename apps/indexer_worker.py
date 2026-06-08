@@ -86,8 +86,8 @@ def _process_job(job_id: int, source_path: str, user_doc_type: str | None) -> in
         t=title,
     )
 
-    # 3) Docling 변환 (~30~120s)
-    load = load_pdf_text(src)
+    # 3) Docling 변환 (~30~120s) — 정규화 markdown 을 data/parsed 에도 남김(디버깅/표 청킹 분석용)
+    load = load_pdf_text(src, save_md_dir="data/parsed")
 
     # 4) parse + chunk
     articles = parse_document(load.text)
