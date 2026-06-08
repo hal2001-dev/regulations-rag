@@ -29,6 +29,9 @@ _SYSTEM_PROMPT = """당신은 한국 사내 규정 검색을 위한 HyDE 도우�
 - 한국어, 규정 문체로 작성.
 - 질문의 핵심 명사를 동의어·관련어로 확장한다 (예: "일비" → "일비, 1일당 정액, 출장 일당").
 - 답이 담길 법한 자료의 '명칭·유형'을 일반적으로 언급한다 (예: "지급표", "구분표", "별표", "기준표", "정액표").
+- ⚠️ [이전 대화] 가 주어지면, 현재 질문에서 생략된 대상·조건을 그 맥락에서 채워 키워드를 확장한다.
+  예) 이전에 "공무원 국내 출장 2호 일비" 를 물었고 현재 질문이 "그럼 식비는?" 이면
+      → "공무원 국내 출장 2호 구분 식비, 1일당 정액, 국내 여비 지급표" 처럼 생략된 맥락을 복원한다.
 - ⚠️ 조문·별표 '번호'(제N조, 별표 N)를 모르면 절대 지어내지 말 것. 확신 없는 번호는 쓰지 않는다.
 - ⚠️ 구체적 금액·수치를 단정하지 말 것.
 - 답변만 출력 (헤더/설명/JSON 없이).
@@ -52,13 +55,26 @@ def _get_llm() -> ChatOpenAI:
 
 
 def query_rewriter_node(state: QueryState) -> dict:
-    """원본 질문 + HyDE 가상 답변 = rewritten_question."""
+    """원본 질문 + HyDE 가상 답변 = rewritten_question.
+
+    멀티턴 대화(history)가 있으면 HyDE 에 이전 대화를 함께 전달해, 후속/지시어 질문의
+    생략된 맥락(대상·조건)을 복원한 키워드로 검색 query 를 확장한다.
+    """
     t0 = time.perf_counter()
     q = state["question"]
+    history = state.get("history", [])
+
+    if history:
+        convo = "\n".join(
+            f"{h.get('role')}: {(h.get('content') or '')[:150]}" for h in history[-6:]
+        )
+        user_content = f"[이전 대화]\n{convo}\n\n[현재 질문]\n{q}"
+    else:
+        user_content = q
 
     try:
         resp = _get_llm().invoke(
-            [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=q)],
+            [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=user_content)],
         )
         hyde = (resp.content or "").strip()
     except Exception as e:  # noqa: BLE001
