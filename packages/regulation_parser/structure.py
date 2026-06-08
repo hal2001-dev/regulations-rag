@@ -21,7 +21,26 @@ PARA_RE = re.compile(r"^([①-⑳])\s*(.*)$")
 ITEM_NUM_RE = re.compile(r"^(\d+)\.\s+(.*)$")
 ITEM_KOR_RE = re.compile(r"^([가-힣])\.\s+(.*)$")
 # "별표 1", "별지 제1호" 등을 인정. "별지" 도 동일 취급 (citation 단위로는 article 과 같은 레벨)
-APPENDIX_RE = re.compile(r"^(별표\s*\d+|별지\s*(?:제\s*)?\d+\s*호?)")
+# 줄 맨 앞에서 시작하는 단순 형태 (예: "별표 1 직급체계표").
+APPENDIX_RE = re.compile(r"^(별표\s*\d+(?:의\d+)?|별지\s*(?:제\s*)?\d+\s*호?)")
+
+# Docling 이 법령 PDF 별표를 뽑을 때의 실제 본문 시작 헤더.
+#   예) "■ 공무원 여비 규정 [별표 2] <개정 2023. 3. 2.>"
+# 머릿글(■ … [별표 N])이 동반된 줄만 별표 *본문* 경계로 인식한다.
+# (목차 줄 "[별표 N] 제목(제3조 관련)" 은 ■ 가 없으므로 여기에 안 걸려 경계로 오인하지 않음.)
+APPENDIX_BODY_RE = re.compile(r"■.*?\[\s*별표\s*(\d+(?:의\d+)?)\s*\]")
+
+# 목차 줄에서 별표 번호 → 제목 매핑을 뽑기 위한 패턴.
+#   예) "[별표 2] 국내 여비 지급표(제10조부터 …관련)"  → ("2", "국내 여비 지급표")
+APPENDIX_TOC_RE = re.compile(r"^\[\s*별표\s*(\d+(?:의\d+)?)\s*\]\s*(.+)$")
+# 제목 뒤에 붙는 "(제N조 … 관련)" 출처 표기 제거용.
+_APPENDIX_TITLE_TAIL_RE = re.compile(r"\s*\([^)]*관련\)\s*$")
+
+# 일부 별표는 "■ … [별표 N]" 머릿글 없이 제목 헤더만 나온다 (Docling 변형).
+#   예) "이전비 지급 기준표 (제20조 관련)"  (← 별표 5, 번호 표기 없음)
+# 이런 줄을 목차에서 만든 {제목→번호} 매핑으로 역추적해 별표 경계로 인정한다.
+# "(제N조 … 관련)" 출처 꼬리가 붙은 제목 줄만 후보로 (일반 문장 오인 방지).
+APPENDIX_TITLE_HEADER_RE = re.compile(r"^(.+?)\s*\(제[^)]*관련\)\s*$")
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -84,12 +103,36 @@ def _strip_md_prefix(line: str) -> str:
     return _MD_PREFIX_RE.sub("", line)
 
 
+def _scan_appendix_titles(text: str) -> dict[str, str]:
+    """별표 목차 줄(`[별표 N] 제목(…관련)`)을 미리 훑어 {"별표 N": "제목"} 매핑 구축.
+
+    본문 헤더(■ … [별표 N])에는 번호만 있고 제목은 다음 줄에 오므로, 목차에서 제목을
+    가져와 채운다. "삭제"된 별표는 제외.
+    """
+    titles: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = _strip_md_prefix(raw.strip())
+        if not line or "■" in line:  # 본문 헤더(■)는 목차가 아니므로 제외
+            continue
+        m = APPENDIX_TOC_RE.match(line)
+        if not m:
+            continue
+        num = re.sub(r"\s+", "", m.group(1))
+        title = _APPENDIX_TITLE_TAIL_RE.sub("", m.group(2).strip()).strip()
+        if title and title != "삭제":
+            titles[f"별표 {num}"] = title
+    return titles
+
+
 def parse_document(text: str) -> list[ParsedArticle]:
     """plain text → 평탄한 ParsedArticle 리스트.
 
     PDF 추출 텍스트가 항상 깨끗하진 않지만, 줄바꿈만 기준으로 보수적으로 파싱한다.
     매칭 안 되는 줄은 가장 깊이 열린 노드(item > paragraph > article)의 body 에 누적.
     """
+    appendix_titles = _scan_appendix_titles(text)
+    # 제목 → 별표 번호 역매핑 (제목만 나오는 별표 헤더 역추적용).
+    title_to_no = {title: no for no, title in appendix_titles.items()}
     articles: list[ParsedArticle] = []
     cur_chapter: str | None = None
     cur_section: str | None = None
@@ -104,7 +147,13 @@ def parse_document(text: str) -> list[ParsedArticle]:
         elif cur_paragraph is not None:
             cur_paragraph.body = _join(cur_paragraph.body, line)
         elif cur_article is not None:
-            cur_article.body = _join(cur_article.body, line)
+            # 별표는 마크다운 표 행 구조를 보존해야 table linearization 가능 → 줄바꿈 유지.
+            if cur_article.is_appendix:
+                cur_article.body = (
+                    cur_article.body + "\n" + line if cur_article.body else line
+                )
+            else:
+                cur_article.body = _join(cur_article.body, line)
         # article 도 없으면 (preamble) 버림
 
     for raw_line in text.splitlines():
@@ -132,14 +181,58 @@ def parse_document(text: str) -> list[ParsedArticle]:
             cur_item = None
             continue
 
-        # ─ 별표/별지 (article 과 동일 레벨로 취급)
+        # ─ 별표 본문 시작 헤더 (■ … [별표 N]) — Docling 법령 PDF 의 실제 별표 경계.
+        #   별표는 장/절 밖이므로 chapter/section 컨텍스트를 끊는다.
+        m = APPENDIX_BODY_RE.search(line)
+        if m:
+            num = re.sub(r"\s+", "", m.group(1))
+            no = f"별표 {num}"
+            cur_chapter = None
+            cur_section = None
+            cur_article = ParsedArticle(
+                chapter=None,
+                section=None,
+                article_no=no,
+                article_title=appendix_titles.get(no),
+                body="",
+                is_appendix=True,
+            )
+            articles.append(cur_article)
+            cur_paragraph = None
+            cur_item = None
+            continue
+
+        # ─ 제목 헤더만 있는 별표 (■[별표 N] 머릿글 누락분) — 목차 제목으로 번호 역추적.
+        #   예) "이전비 지급 기준표 (제20조 관련)" → title_to_no 로 "별표 5" 인식.
+        #   이미 같은 별표를 진행 중이면(제목 줄 중복) 새 경계로 만들지 않고 본문에 누적.
+        mt = APPENDIX_TITLE_HEADER_RE.match(line)
+        if mt:
+            cand_no = title_to_no.get(mt.group(1).strip())
+            if cand_no and not (cur_article is not None and cur_article.article_no == cand_no):
+                cur_chapter = None
+                cur_section = None
+                cur_article = ParsedArticle(
+                    chapter=None,
+                    section=None,
+                    article_no=cand_no,
+                    article_title=appendix_titles.get(cand_no),
+                    body="",
+                    is_appendix=True,
+                )
+                articles.append(cur_article)
+                cur_paragraph = None
+                cur_item = None
+                continue
+
+        # ─ 별표/별지 (줄 맨 앞 단순 형태, article 과 동일 레벨로 취급)
         m = APPENDIX_RE.match(line)
         if m:
+            no = re.sub(r"\s+", " ", m.group(1)).strip()
             cur_article = ParsedArticle(
                 chapter=cur_chapter,
                 section=cur_section,
-                article_no=re.sub(r"\s+", " ", m.group(1)).strip(),
-                article_title=None,
+                article_no=no,
+                article_title=appendix_titles.get(no),
                 body=line[m.end() :].strip(),
                 is_appendix=True,
             )
@@ -252,6 +345,41 @@ def _self_check() -> None:
     # 가. 나. 는 paragraph 가 없는 article 직속에는 안 들어감 (paragraph 안에 있어야 함)
     assert arts[3].article_no == "별표 1"
     assert arts[3].is_appendix
+
+    # ─ 별표 본문 헤더(■ … [별표 N]) + 목차 제목 매핑 케이스 (Docling 법령 PDF 형태)
+    appendix_sample = """## 제6장 보칙
+
+제18조(근무지 내 출장) ③ 및 ④ 생략 [별표 1] 여비 지급 구분표(제3조 관련) [별표 2] 국내 여비 지급표(제10조 관련)
+
+- [별표 1] 여비 지급 구분표(제3조 관련)
+- [별표 2] 국내 여비 지급표(제10조부터 제13조까지 및 제16조제1항 관련)
+
+## ■ 공무원 여비 규정 [별표 1] &lt;개정 2022. 5. 9.&gt;
+
+## 여비 지급 구분표(제3조 관련)
+
+| 구분 | 해당 공무원 |
+|------|------|
+| 제1호 | 대통령 등 |
+
+- ■ 공무원 여비 규정 [별표 2] &lt;개정 2023. 3. 2.&gt;
+
+## 국내 여비 지급표 (제10조부터 제13조까지 및 제16조제1항 관련)
+
+| 구분 | 일비 (1일당) |
+|------|------|
+| 제2호 | 25,000 |
+"""
+    ax = parse_document(appendix_sample)
+    by_no = {a.article_no: a for a in ax}
+    assert "별표 1" in by_no and "별표 2" in by_no, [a.article_no for a in ax]
+    assert by_no["별표 2"].is_appendix
+    assert by_no["별표 2"].article_title == "국내 여비 지급표", by_no["별표 2"].article_title
+    assert by_no["별표 2"].chapter is None  # 별표는 장/절 밖
+    assert "25,000" in by_no["별표 2"].body
+    assert "제18조" in by_no  # 조문 자체는 그대로 분리
+    print("appendix-header self-check ok: 별표 2 →", by_no["별표 2"].article_title)
+
     print(f"self-check ok: parsed {len(arts)} articles")
     for a in arts:
         print(f"  {a.chapter} / {a.section} / {a.article_no} {a.article_title or ''}")

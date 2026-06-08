@@ -91,7 +91,9 @@ def _process_job(job_id: int, source_path: str, user_doc_type: str | None) -> in
 
     # 4) parse + chunk
     articles = parse_document(load.text)
-    chunks = chunk_document(title, articles)
+    chunks = chunk_document(
+        title, articles, linearize_tables=get_settings().linearize_appendix_tables
+    )
     log.info(
         "Parsed: {n_art} articles → {n_chunk} chunks ({q})",
         n_art=len(articles),

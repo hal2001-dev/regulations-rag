@@ -35,7 +35,11 @@ class Settings(BaseSettings):
     embedding_dim: int = 1024
     sparse_model: str = "Qdrant/bm25"
     llm_model: str = "gpt-4o-mini"
-    reranker_model: str = "BAAI/bge-reranker-v2-m3"
+    # fastembed 가 지원하는 다국어 cross-encoder (한국어 포함). bge-reranker-v2-m3 는 fastembed 미지원.
+    reranker_model: str = "jinaai/jina-reranker-v2-base-multilingual"
+    rerank_enabled: bool = True
+    rerank_candidate_k: int = 60  # RRF 상위 N 을 rerank 입력으로 (별표 다수 환경서 정답 누락 방지, ISSUE-001)
+    linearize_appendix_tables: bool = True  # 별표 표 → 행 단위 자연어 청크 (ISSUE-001)
     ocr_lang: str = "ko-KR"
 
     # Dirs

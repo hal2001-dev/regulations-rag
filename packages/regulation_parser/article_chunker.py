@@ -8,6 +8,7 @@ mvp_plan §M2.4:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -18,6 +19,59 @@ from packages.regulation_parser.structure import (
 
 CHUNK_TOKEN_LIMIT = 800
 CHARS_PER_TOKEN = 2  # 한국어 보수 휴리스틱 (tiktoken 없이 충분)
+
+# 마크다운 표 파싱 (table linearization, ISSUE-001) ──────────────────
+_TABLE_ROW_RE = re.compile(r"^\s*\|(.+)\|\s*$")
+_TABLE_SEP_RE = re.compile(r"^\s*\|[\s:|\-]+\|\s*$")  # |---|:--:|
+
+
+def _parse_md_tables(text: str) -> list[tuple[list[str], list[list[str]]]]:
+    """본문에서 마크다운 표 블록을 (header, rows) 리스트로 추출."""
+    tables: list[tuple[list[str], list[list[str]]]] = []
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        m = _TABLE_ROW_RE.match(lines[i])
+        if m and i + 1 < len(lines) and _TABLE_SEP_RE.match(lines[i + 1]):
+            header = [c.strip() for c in m.group(1).split("|")]
+            rows: list[list[str]] = []
+            j = i + 2
+            while j < len(lines):
+                if _TABLE_SEP_RE.match(lines[j]):
+                    j += 1
+                    continue
+                rm = _TABLE_ROW_RE.match(lines[j])
+                if not rm:
+                    break
+                rows.append([c.strip() for c in rm.group(1).split("|")])
+                j += 1
+            if rows:
+                tables.append((header, rows))
+            i = j
+        else:
+            i += 1
+    return tables
+
+
+def _linearize_row(prefix: str, header: list[str], cells: list[str]) -> str | None:
+    """표 한 행 → 검색 친화 자연어 문장.
+
+    예) prefix="공무원여비규정 > 별표 2 (국내 여비 지급표)",
+        header=["구분","일비 (1일당)","식비 (1일당)"], cells=["제2호","25,000","25,000"]
+      → "공무원여비규정 > 별표 2 (국내 여비 지급표) — 구분 제2호: 일비 (1일당) 25,000, 식비 (1일당) 25,000"
+    """
+    if not cells or not any(c for c in cells):
+        return None
+    subject = cells[0].strip()
+    pairs = [
+        f"{(header[k] if k < len(header) else '').strip()} {cells[k].strip()}".strip()
+        for k in range(1, len(cells))
+        if cells[k].strip()
+    ]
+    if not pairs:
+        return None
+    subj_label = (header[0].strip() + " " if header and header[0].strip() else "") + subject
+    return f"{prefix} — {subj_label}: " + ", ".join(pairs)
 
 
 @dataclass
@@ -91,14 +145,40 @@ def _heading_path(doc_title: str, a: ParsedArticle, paragraph: str | None = None
     }
 
 
-def chunk_document(doc_title: str, articles: list[ParsedArticle]) -> list[Chunk]:
-    """ParsedArticle 시퀀스 → Chunk 시퀀스."""
+def chunk_document(
+    doc_title: str, articles: list[ParsedArticle], linearize_tables: bool = True
+) -> list[Chunk]:
+    """ParsedArticle 시퀀스 → Chunk 시퀀스.
+
+    linearize_tables=True 면 별표 표를 행 단위 자연어 청크로 보강 (ISSUE-001).
+    """
     out: list[Chunk] = []
     for a in articles:
         full = _render_full_article(a)
         breadcrumb = _breadcrumb(doc_title, a)
         full_body = breadcrumb + "\n\n" + full
         content_type = "appendix" if a.is_appendix else "article"
+
+        # 별표 표 → 행 단위 자연어 청크 추가 (table linearization, ISSUE-001).
+        # 원본 별표 청크(맥락)는 그대로 두고, 검색 친화 행 문장을 별도 청크로 보강.
+        if a.is_appendix and linearize_tables:
+            for header, rows in _parse_md_tables(full):
+                for cells in rows:
+                    sent = _linearize_row(breadcrumb, header, cells)
+                    if not sent:
+                        continue
+                    out.append(
+                        Chunk(
+                            chapter=a.chapter,
+                            section=a.section,
+                            article_no=a.article_no,
+                            article_title=a.article_title,
+                            paragraph=None,
+                            body=sent,
+                            heading_path=_heading_path(doc_title, a),
+                            content_type="appendix_row",
+                        )
+                    )
 
         if _approx_tokens(full_body) <= CHUNK_TOKEN_LIMIT or not a.paragraphs:
             out.append(
