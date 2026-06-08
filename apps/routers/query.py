@@ -11,8 +11,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from packages.code.logger import get_logger
+from packages.db.connection import session_scope
+from packages.db.repository import get_recent_history, save_turn
 from packages.rag.graph import build_graph
 from packages.rag.nodes.clarifier_node import apply_user_choice
+
+HISTORY_TURNS = 5  # generator 에 주입할 최근 멀티턴 수
 
 log = get_logger("apps.routers.query")
 router = APIRouter(prefix="/query", tags=["query"])
@@ -118,17 +122,45 @@ async def _astream_state(g, inputs: dict | None, config: dict):
             )
 
 
+async def _persist_turn(g, config: dict, session_id: str, question: str | None = None) -> None:
+    """완료된 turn(user 질문 + assistant 답변)을 messages 에 저장.
+
+    clarify 대기 중(needs_clarify)이면 답변 미완이므로 저장하지 않는다 (resume 완료 시 저장).
+    question=None 이면 state 의 question 사용 (resume 경로).
+    """
+    try:
+        snap = await g.aget_state(config)
+        sv = snap.values if snap else {}
+        if sv.get("needs_clarify"):
+            return
+        draft = (sv.get("draft") or "").strip()
+        q = (question or sv.get("question") or "").strip()
+        if not draft or not q:
+            return
+        with session_scope() as s:
+            save_turn(
+                s, session_id, q, draft,
+                route=sv.get("route"),
+                citation_pct=sv.get("citation_valid_pct"),
+            )
+    except Exception as e:  # noqa: BLE001
+        log.warning("save_turn failed (session={s}): {e}", s=session_id, e=e)
+
+
 @router.post("/stream")
 async def stream_query(req: QueryRequest) -> StreamingResponse:
     g = await build_graph()
     session_id = req.session_id or str(uuid.uuid4())
     config = {"configurable": {"thread_id": session_id}}
-    inputs = {"question": req.question, "session_id": session_id}
+    with session_scope() as s:
+        history = get_recent_history(s, session_id, HISTORY_TURNS)
+    inputs = {"question": req.question, "session_id": session_id, "history": history}
 
     async def event_stream():
         try:
             async for chunk in _astream_state(g, inputs, config):
                 yield chunk
+            await _persist_turn(g, config, session_id, req.question)
         except Exception as e:  # noqa: BLE001
             log.exception("/query/stream error: {e}", e=e)
             yield _sse("error", {"message": str(e)})
@@ -164,6 +196,7 @@ async def resume_query(req: ResumeRequest) -> StreamingResponse:
             # inputs=None → 저장된 state 에서 다음 노드 (clarify_pause) 부터 진행
             async for chunk in _astream_state(g, None, config):
                 yield chunk
+            await _persist_turn(g, config, req.session_id)
         except Exception as e:  # noqa: BLE001
             log.exception("/query/resume error: {e}", e=e)
             yield _sse("error", {"message": str(e)})

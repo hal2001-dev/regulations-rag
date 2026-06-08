@@ -34,6 +34,7 @@ class QueryState(TypedDict, total=False):
     # 입력
     question: str
     session_id: str
+    history: list[dict[str, str]]  # 최근 멀티턴 [{role, content}] — generator 컨텍스트용
 
     # M5 clarifier / rewriter
     needs_clarify: bool  # True 면 graph 가 interrupt

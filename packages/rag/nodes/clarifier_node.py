@@ -29,6 +29,8 @@ _SYSTEM_PROMPT = """당신은 한국 사내 규정 RAG 시스템의 clarifier �
 사용자 질문이 retrieval/SQL 조회에 충분히 구체적인지 판단하고, 정말로 모호할 때만 chip 옵션을 제공하세요.
 대부분의 질문은 그대로 통과시키세요 (false-positive 가 사용자 경험을 크게 해칩니다).
 
+⚠️ [이전 대화] 가 주어지면 먼저 그 맥락으로 질문을 해석하세요. 후속/지시어 질문("방금 그거", "그럼 식비는?", "내가 뭘 물었지?")이 이전 대화로 **자연스럽게 풀리면 should_clarify=false** 로 통과시키세요 (대상이 이미 대화에 있으므로 모호하지 않음).
+
 다음 4 패턴 중 하나에 명백히 해당할 때만 clarify, 그 외는 모두 통과:
 
 1. target_ambiguous — 지시 대명사만으로 대상이 안 잡힘 ("그 규정 알려줘", "이 사람 휴가", "거기 한도")
@@ -85,25 +87,32 @@ def clarifier_node(state: QueryState) -> dict:
     """
     t0 = time.perf_counter()
     q = state["question"]
-    history = state.get("clarifications", [])
+    clarify_hist = state.get("clarifications", [])
+    conv_hist = state.get("history", [])  # 멀티턴 대화 (user/assistant)
 
     # UX 가드: 누적 한계 도달 시 강제 통과
-    if len(history) >= MAX_CLARIFICATIONS:
-        log.info("clarifications limit reached ({n}) — bypass", n=len(history))
+    if len(clarify_hist) >= MAX_CLARIFICATIONS:
+        log.info("clarifications limit reached ({n}) — bypass", n=len(clarify_hist))
         return {
             "needs_clarify": False,
             "timings": {**state.get("timings", {}), "clarifier": time.perf_counter() - t0},
         }
 
-    # history 가 있으면 question 을 누적된 대화로 풀어서 LLM 에 전달
-    if history:
-        context = "\n".join(
-            f"- 이전 clarify: {c.get('question','')} → 선택: {c.get('user_choice','')}"
-            for c in history
+    parts = [f"질문: {q}"]
+    # 멀티턴 대화 — 후속/지시어 질문이 이전 맥락으로 풀리면 clarify 불필요.
+    if conv_hist:
+        convo = "\n".join(
+            f"- {h.get('role')}: {(h.get('content') or '')[:150]}" for h in conv_hist[-6:]
         )
-        user = f"질문: {q}\n\n이전 대화:\n{context}"
-    else:
-        user = f"질문: {q}"
+        parts.append(f"\n[이전 대화 (이 맥락으로 해소되면 clarify 하지 말 것)]\n{convo}")
+    # clarify 누적 (같은 turn 의 이전 역질문)
+    if clarify_hist:
+        ctx = "\n".join(
+            f"- 이전 clarify: {c.get('question','')} → 선택: {c.get('user_choice','')}"
+            for c in clarify_hist
+        )
+        parts.append(f"\n[이전 clarify]\n{ctx}")
+    user = "\n".join(parts)
 
     try:
         resp = _get_llm().invoke(

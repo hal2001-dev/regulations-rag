@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from apps.config import get_settings
@@ -49,7 +49,9 @@ SYSTEM_PROMPT = """당신은 한국 사내 규정·매뉴얼 전문 어시스턴
 """
 
 
-def _build_messages(question: str, sources: list[dict]) -> list:
+def _build_messages(
+    question: str, sources: list[dict], history: list[dict] | None = None
+) -> list:
     if not sources:
         ctx = "(컨텍스트 없음)"
     else:
@@ -62,8 +64,16 @@ def _build_messages(question: str, sources: list[dict]) -> list:
             body = (s.get("body") or "").strip()
             parts.append(f"[{head}]\n{body}")
         ctx = "\n\n---\n\n".join(parts)
+    msgs: list = [SystemMessage(content=SYSTEM_PROMPT)]
+    # 이전 멀티턴 대화(최근 N turn) — 후속 질문의 지시어/맥락 이해용.
+    for h in history or []:
+        if h.get("role") == "user":
+            msgs.append(HumanMessage(content=h["content"]))
+        elif h.get("role") == "assistant":
+            msgs.append(AIMessage(content=h["content"]))
     user = f"[컨텍스트]\n{ctx}\n\n[질문]\n{question}"
-    return [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=user)]
+    msgs.append(HumanMessage(content=user))
+    return msgs
 
 
 _llm: ChatOpenAI | None = None
@@ -88,7 +98,7 @@ async def generator_node(state: QueryState) -> dict:
     q = state.get("rewritten_question") or state["question"]
     sources = state.get("sources", [])
 
-    msgs = _build_messages(q, sources)
+    msgs = _build_messages(q, sources, state.get("history"))
     llm = _get_llm()
 
     chunks: list[str] = []
