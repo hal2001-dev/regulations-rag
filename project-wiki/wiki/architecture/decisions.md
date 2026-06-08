@@ -241,6 +241,17 @@ M1 시작 시점의 핵심 결정 13개. 변경 시 본 문서에 **새 ADR 을 
 - latency 후속: clarifier prefilter (명확 query 는 LLM 안 부르고 통과) + HyDE → dense embedding 대체 — gpt-4o-mini 호출 두 번 절약. ADR-016 의 후속 채널.
 - ragas 는 `--ragas` 플래그로 옵션, 비용 발생 시점에만 측정.
 
+### ADR-020: Retrieval 에 cross-encoder reranker 추가 (BAAI/bge-reranker-base)
+
+**Status**: accepted (2026-06-08, [ISSUE-001](../issues/resolved/ISSUE-001.md))
+**Context**: 별표 표 등 짧은 한국어 표 청크를 RRF(dense e5-large + sparse BM25)만으로는 변별하지 못함. 의미상 정반대인 국내/국외 별표도 못 가려 "2호구분 일비" 가 국외 별표 4 를 1위로 잡음. ADR-016 에서 reranker 를 후속으로 미뤄둔 항목.
+**Decision**: RRF 후보 `rerank_candidate_k=60` 을 fastembed `TextCrossEncoder(BAAI/bge-reranker-base)` 로 **원질문**(HyDE 아님)과 1:1 재정렬 → 상위 10. `rerank_enabled` 토글 (`reranker.py`, `retriever_node`).
+**Consequences**:
+- 대안 기각: `bge-reranker-v2-m3` / `jina-reranker-v2-base-multilingual` 은 fastembed 미지원 또는 ONNX 누락 → base 채택.
+- `candidate_k` 30→60: 별표 9개 환경에서 정답 행 청크가 후보 밖으로 밀린 회귀를 후보 확대로 해결. 추론 +193ms(전체 ~15s 의 1.3%).
+- ablation 으로 rerank 가 검색 정확도 1등 확인 ("2호구분 일비" RRF top6밖 → rerank 1위 +3.5). linearization 은 후보를 깔아주는 보조.
+- 컬렉션 확장 시 `rerank_candidate_k` 재조정 필요.
+
 ## ADR 작성 가이드
 - 새 결정 시 `ADR-(N+1)` 로 append
 - 기존 결정 변경 시: 새 ADR + 기존 ADR Status 를 `superseded by ADR-XXX` 로 변경 (본문 수정 금지)

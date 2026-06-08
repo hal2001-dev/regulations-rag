@@ -128,6 +128,20 @@
 - 5 query 가 clarify 발동 (A03/A05/A10/M04 + 1) — 의도된 보수적 동작이나 doc_id 채점 제외. 명확 query 의 clarifier skip 휴리스틱이 후속 과제.
 - 출처: `apps/routers/admin.py`, `apps/routers/documents.py`, `web/app/{library,admin}/*`, `tests/e2e/golden_queries.yaml`, `scripts/eval_ragas.py`, `reports/eval.json`, `features/evaluation.md`
 
+## [2026-06-08] build | 별표(부표) 청킹 버그 수정 + Docling md 산출물 저장 — ISSUE-001
+- **증상**: "국내여비규정 2호구분 공무원의 일비?" 검색 실패, "하루 일비?" 로 바꾸면 성공. retrieval score 0.0x 로 불안정.
+- **원인**: 별표 2(국내 여비 지급표) 일비표가 독립 청크가 아니라 `제18조 ③`(id 342)에 별표 1~9 전체와 12,218자로 뭉침. `APPENDIX_RE=^별표\d+` 가 Docling 실제 출력(`- [별표 N]` 목차 / `■ … [별표 N]` 본문헤더 / `## 제목` 별표단어 없음)을 못 잡아 경계 미인식 → 직전 조문에 흡수 + `chapter="제6장 보칙"` 오라벨.
+- **수정** (`packages/regulation_parser/structure.py`):
+  - `APPENDIX_BODY_RE = ■.*?\[\s*별표\s*(\d+(?:의\d+)?)\s*\]` — ■ 동반 줄만 본문 경계 (목차와 구분)
+  - `APPENDIX_TOC_RE` + `_scan_appendix_titles()` — 목차에서 번호→제목 매핑 역주입
+  - 별표 진입 시 chapter/section=None
+  - `_self_check()` 에 별표 헤더 회귀 케이스 추가 (exit=0)
+- **검증** (공무원여비규정.md 재파싱): 39→45 청크, 최대 12,218→**5,283자**, 별표 2 가 `공무원여비규정 > 별표 2 (국내 여비 지급표)` 독립 청크로 분리 (일비/제2호/25,000 온전).
+- **부수**: `docling_loader.load_pdf_text(save_md_dir=)` + `indexer_worker` 가 `data/parsed/<문서>.md` 자동 저장. `.gitignore` `data/` → `data/*` + `data/parsed/*.md` 추적. 4 PDF 변환 산출물 커밋.
+- **후속(미해결)**: 별표 4(5,283자) 행 단위 분할(table linearization), 별표 5·6의2·8 누락(■ 헤더 형태 차이), **공무원여비규정 재인덱싱**(DB 반영) 필요.
+- 영향 페이지: `features/ingestion.md`, `issues/resolved/ISSUE-001.md`, `troubleshooting/common.md`, `index.md`
+- 출처: `packages/regulation_parser/structure.py`, `packages/loaders/docling_loader.py`, `apps/indexer_worker.py`, `data/parsed/`
+
 ## [2026-05-28] build | post-M6 — Chat UI 폴리시 + Generator prompt 보강
 - `web/components/chat/starter-chips.tsx` 신규 — 빈 채팅 화면에 3 카테고리 (정책·규정 / 위임전결 / 매뉴얼) ×8 starter prompts. 클릭 시 `startTurn` 직접 호출. lucide-react `Scale/ScrollText/FileText` 아이콘.
 - `chat-stream.tsx` 빈 상태 placeholder 제거하고 `StarterChips` 마운트. busy 상태 disabled 전달.
@@ -173,3 +187,14 @@
 - 현 정확도 표는 ADR-019(옛 17 PDF 30 query) 기준임을 명시 — 현 4 PDF eval 재작성이 선행 과제.
 - 갱신 페이지: `index.md`(카탈로그 + 날짜).
 - 출처: `features/{authority_matrix,citation,retrieval,generation}.md`, PRD §24
+
+## [2026-06-08] build | ISSUE-001 retrieval 완전 해결 — linearization + HyDE + reranker + 별표 정규식 일반화
+- **table linearization** (`article_chunker`): 별표 표를 `구분 제2호: 일비 25,000` 행 문장 청크(`appendix_row`)로. 별표 body 줄바꿈 보존(`structure.py`). `linearize_appendix_tables` 토글. 범위=별표 표만(보험약관 본문 표 제외).
+- **HyDE 수정** (`query_rewriter_node`): 조문·별표 번호 추측 금지 + 동의어/자료유형 확장, temperature 0. 거짓 "별표 1" 환각 제거.
+- **reranker 연결** (`reranker.py` 신규, `retriever_node`): RRF 후보(`rerank_candidate_k=60`)를 BAAI/bge-reranker-base cross-encoder 로 원질문과 재정렬. jina-v2-multilingual/bge-v2-m3 는 fastembed 미지원이라 base 채택.
+- **별표 정규식 일반화** (`structure.py`): `■[별표N]` 외 제목헤더 역추적(`APPENDIX_TITLE_HEADER_RE`+목차 매핑) → 별표 6→9개 전수(별표 5·6의2·8 복구).
+- **ablation**: 같은 청킹에서 rerank OFF→top6밖 / ON→별표2 1위(+3.5). **reranker 가 성능 1등**, linearization 은 안전마진 보조. 별표 9개로 늘며 정답이 후보 top30 밖 밀린 회귀 → `rerank_candidate_k` 30→60(추론 +193ms, 전체의 1.3%)으로 해결.
+- **검증**: "2호구분 일비"/"하루 일비" → 별표2 1·2위, 답변 "1일당 25,000원". 별표8 +7.3, 별표5 +4.9 신규 인식 정상.
+- 신규 위키 `features/clarifier.md`(끊긴 링크 해소). 영향: `features/{retrieval,ingestion}.md`, `issues/resolved/ISSUE-001.md`, `troubleshooting/common.md`, `index.md`.
+- 설정: `.env` `RERANK_ENABLED=true`, `RERANK_CANDIDATE_K=60`, `RERANKER_MODEL=BAAI/bge-reranker-base`.
+- 출처: `packages/rag/{reranker,nodes/retriever_node,nodes/query_rewriter_node}.py`, `packages/regulation_parser/{structure,article_chunker}.py`, `apps/config.py`

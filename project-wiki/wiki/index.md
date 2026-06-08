@@ -1,7 +1,7 @@
 # Wiki Index
 
 **상태**: active
-**마지막 업데이트**: 2026-06-05 (answer_accuracy.md 추가)
+**마지막 업데이트**: 2026-06-08 (ISSUE-001 해결: 별표 청킹+linearization+reranker / clarifier.md 작성)
 
 wiki 내 모든 페이지의 단일 카탈로그. 새로운 페이지를 추가할 때마다 본 index 도 함께 갱신할 것. 답변/탐색 시 가장 먼저 읽는다.
 
@@ -26,11 +26,11 @@ wiki 내 모든 페이지의 단일 카탈로그. 새로운 페이지를 추가�
 ## Features
 - [features/authority_matrix.md](features/authority_matrix.md) — ✅ active. 위임전결 SQL 정확 조회 (차별점 1). 현 데이터셋(4 PDF)에 282 rules 추출 완료 (2026-06-05, vision LLM)
 - [features/citation.md](features/citation.md) — ★ heading_path 계층 인용 (차별점 2)
-- [features/ingestion.md](features/ingestion.md) — Docling + regulation_parser (✅ M2 완료, 후속 fallback chunker 과제)
+- [features/ingestion.md](features/ingestion.md) — Docling + regulation_parser (✅ M2 완료. 2026-06-08 별표 본문 경계 인식 추가 — [ISSUE-001](issues/resolved/ISSUE-001.md). 후속: 표 행단위 분할 + fallback chunker)
 - [features/embedding.md](features/embedding.md) — ✅ M3, multilingual-e5-large + Qdrant/bm25 (ADR-014/015 로 대체 결정)
-- [features/retrieval.md](features/retrieval.md) — ✅ M3, hybrid dense+sparse + RRF, route 별 payload filter
+- [features/retrieval.md](features/retrieval.md) — ✅ M3 hybrid dense+sparse + RRF. **2026-06-08 cross-encoder reranker(bge-reranker-base) 연결 — 검색 정확도 핵심 ([ISSUE-001](issues/resolved/ISSUE-001.md))**
 - [features/generation.md](features/generation.md) — ✅ M3, gpt-4o-mini stream + 5-block prompt + citation_validator
-- [features/clarifier.md](features/clarifier.md) — ✅ M5, 4 패턴 LLM 감지 + interrupt_before + /query/resume (이 페이지는 향후 작성)
+- [features/clarifier.md](features/clarifier.md) — ✅ M5, 4 패턴 LLM 감지 + interrupt_before + /query/resume
 - [features/evaluation.md](features/evaluation.md) — ✅ M6, 30 golden queries + KPI 자동 측정 + ragas 옵션. baseline 기록.
 - [features/answer_accuracy.md](features/answer_accuracy.md) — ★ 규정·제도 질의 정확도 확보 방법 (위험 5종 → 방어 6단계 플레이북 + 질문 작성 가이드)
 
@@ -58,11 +58,12 @@ wiki 내 모든 페이지의 단일 카탈로그. 새로운 페이지를 추가�
 - [onboarding/setup.md](onboarding/setup.md) — 개발 환경 셋업 (TODO, M1 코드 작업 시)
 
 ## Troubleshooting
-- [troubleshooting/common.md](troubleshooting/common.md) — 자주 발생하는 에러 (TODO)
+- [troubleshooting/common.md](troubleshooting/common.md) — ✅ 자주 발생하는 에러 4종 (별표 검색 실패 / 조문 흡수 / HTML entity / 포트 불일치)
 
 ## Meetings / Issues / Reviews
 - `meetings/` — 회의록 (없음)
-- `issues/open/`, `issues/resolved/` — 이슈 (없음)
+- `issues/open/` — (없음)
+- [issues/resolved/ISSUE-001.md](issues/resolved/ISSUE-001.md) — ✅ resolved. 별표 거대 청크 검색 실패 → 별표 청킹 + linearization + HyDE 수정 + **reranker(결정타)** 로 해결 (2026-06-08)
 - `reviews/patterns.md`, `reviews/PR-NNN.md` — 코드 리뷰 (없음)
 
 ---

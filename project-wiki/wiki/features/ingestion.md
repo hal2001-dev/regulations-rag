@@ -1,8 +1,8 @@
 # Ingestion Pipeline
 
 **상태**: active
-**마지막 업데이트**: 2026-05-27 (M2 완료)
-**관련 페이지**: [../data/spec.md](../data/spec.md), [../architecture/pipeline.md](../architecture/pipeline.md), [authority_matrix.md](authority_matrix.md)
+**마지막 업데이트**: 2026-06-08 (별표 본문 경계 인식 추가 — [ISSUE-001](../issues/resolved/ISSUE-001.md))
+**관련 페이지**: [../data/spec.md](../data/spec.md), [../architecture/pipeline.md](../architecture/pipeline.md), [authority_matrix.md](authority_matrix.md), [../issues/resolved/ISSUE-001.md](../issues/resolved/ISSUE-001.md)
 
 ## 요약
 17 PDF → Docling text 추출 → 조 단위 chunking (breadcrumb prepend) → Postgres `documents`/`articles` 적재. M2 범위에서는 임베딩/Qdrant upsert 는 제외 (M3 retrieval 작업 시 본 파이프라인에 추가).
@@ -42,8 +42,22 @@ ARTICLE  = r"^(제\s*\d+\s*조(?:의\d+)?)\s*(?:\(([^)]+)\))?(.*)$"
 PARA     = r"^([①-⑳])\s*(.*)$"
 ITEM_NUM = r"^(\d+)\.\s+(.*)$"
 ITEM_KOR = r"^([가-힣])\.\s+(.*)$"
-APPENDIX = r"^(별표\s*\d+|별지\s*(?:제\s*)?\d+\s*호?)"
+APPENDIX = r"^(별표\s*\d+(?:의\d+)?|별지\s*(?:제\s*)?\d+\s*호?)"  # 줄 맨 앞 단순형
 ```
+
+### 별표 본문 경계 인식 (2026-06-08 추가 — ISSUE-001)
+실 PDF 의 별표는 위 단순형(`별표 1 …`)으로 안 나오고, Docling 이 아래 3가지로 뽑는다 — **3가지 모두 인식**한다:
+```python
+APPENDIX_BODY_RE         = r"■.*?\[\s*별표\s*(\d+(?:의\d+)?)\s*\]"   # "■ 공무원 여비 규정 [별표 2] <개정…>" = 본문 경계
+APPENDIX_TOC_RE          = r"^\[\s*별표\s*(\d+(?:의\d+)?)\s*\]\s*(.+)$"  # "[별표 2] 국내 여비 지급표(제10조 관련)" = 목차→제목
+APPENDIX_TITLE_HEADER_RE = r"^(.+?)\s*\(제[^)]*관련\)\s*$"            # "이전비 지급 기준표 (제20조 관련)" = 제목만(번호 없음)
+```
+- **(1) `■[별표 N]` 헤더** — 번호 명시. 가장 명확.
+- **(2) 목차 `[별표 N] 제목`** — `_scan_appendix_titles()` 가 사전 스캔해 `번호↔제목` 매핑 구축.
+- **(3) 제목만 있는 헤더** — 일부 별표는 `■[별표 N]` 머릿글 없이 제목(`## 이전비 지급 기준표 (제20조 관련)`)만 나온다. 이를 (2)의 `제목→번호` 역매핑으로 역추적해 별표 경계로 인정. **단 이미 같은 별표 진행 중이면(제목 줄 중복) 새 경계로 만들지 않음.**
+- 별표 진입 시 `chapter/section=None` (별표는 장/절 밖).
+- **효과**: 공무원여비규정 별표 **6개→9개 전부 인식**(별표 5·6의2·8 = 제목만 있던 분 복구). 39→84 청크(행 청크 36 포함). 최대 청크 12,218→5,283자. 별표 2 가 독립 청크로 분리.
+- 회귀: `structure.py::_self_check()` 에 별표 헤더 케이스 포함. 상세 [ISSUE-001](../issues/resolved/ISSUE-001.md).
 
 ### markdown prefix strip (M2 추가)
 Docling 출력이 `## 제8조의2(중기성과품)` 같은 markdown heading 으로 나오는 케이스가 흔함 + `- ① ...` list marker 도 흔함. 라인 정규화 단계에서 `^(?:#+\s+|[-*]\s+)` 를 strip 하지 않으면 ARTICLE/PARA regex 가 모두 miss → 한 article 에 다음 조의 paragraph 가 흡수되는 hallucination. **상임이사및감사보수규정.pdf 1차 인덱싱에서 발견 → fix**.
@@ -100,6 +114,14 @@ Docling layout/table 모델이 float64 사용 → MPS 에러. `AcceleratorOption
 
 ### 5. OCR fallback 미구현
 M2 는 OCR off 만. mvp_plan §M2.2 의 macOS Vision OCR fallback (`OcrMacOptions(lang=['ko-KR'])`) 은 스캔본 PDF 가 들어올 때 추가 (현재 17 PDF 모두 디지털).
+
+### 6. 별표 표 행 단위 linearization + 별표 전수 인식 (2026-06-08, ISSUE-001 — ✅ 해결)
+- **표 행 단위 linearization 적용** — 별표 표를 `별표 2 국내 여비 지급표 — 구분 제2호: 일비 25,000, …` 식 행 문장 청크로 변환(`article_chunker._parse_md_tables`/`_linearize_row`, `content_type='appendix_row'`). 원본 별표 청크는 맥락용으로 유지. `linearize_appendix_tables` 설정으로 토글. **현재 범위: 별표(is_appendix) 청크의 표만** (보험약관 본문 표는 미적용 — 후속).
+- **별표 5·6의2·8 누락 해결** — 제목 헤더 역추적(`APPENDIX_TITLE_HEADER_RE`)으로 `■` 없는 별표까지 인식. 별표 6→9개 전부.
+- 남은 후속: 보험약관 본문 인라인 표(774+264행) linearization 확장은 reranker 가 어느 정도 커버하므로 보류.
+
+### 7. 파싱 산출 markdown 저장 (2026-06-08 추가)
+`load_pdf_text(path, save_md_dir=...)` 로 정규화 markdown 을 디스크에 남길 수 있음. `indexer_worker` 가 ingest 시 `data/parsed/<문서>.md` 로 자동 저장 → 표/별표 청킹 디버깅·재현에 사용 (Docling 변환이 CPU 라 느려 캐시 효과도 있음). `.gitignore` 는 `data/parsed/*.md` 만 예외 추적.
 
 ## 출처
 - `docs/mvp_plan.md` §Ingestion Pipeline + §M2

@@ -80,7 +80,7 @@
    - authority hierarchical row 처리
    - process 매핑 정확도 (지금 "other" 89%)
    - admin CSV escape hatch (`POST /authority/csv`)
-5. **이월 (M2 후속)**: manual/faq fallback chunker (0-chunk 2 docs)
+5. **이월 (M2 후속)**: manual/faq fallback chunker (0-chunk 2 docs) 만 남음. ✅ **별표 검색은 ISSUE-001 로 완전 해결** — 별표 청킹 + table linearization + HyDE 수정 + **reranker(BAAI/bge-reranker-base, ADR-020)** + 별표 정규식 일반화(6→9개). "2호구분 일비" → 별표 2 1위. 남은 후속: 보험약관 본문 표 linearization 확장(보류).
 6. **ragas baseline** — `python scripts/eval_ragas.py --ragas` 1회 측정해서 faithfulness/answer_relevancy 기준점 잡기
 
 ## 출처
