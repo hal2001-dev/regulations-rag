@@ -2,7 +2,7 @@
 
 **상태**: active
 **마지막 업데이트**: 2026-06-08 (페이지 신규 — 기능은 M5 구현)
-**관련 페이지**: [generation.md](generation.md), [retrieval.md](retrieval.md), [answer_accuracy.md](answer_accuracy.md), [../architecture/pipeline.md](../architecture/pipeline.md), [../architecture/decisions.md](../architecture/decisions.md)
+**관련 페이지**: [conversation_memory.md](conversation_memory.md), [generation.md](generation.md), [retrieval.md](retrieval.md), [answer_accuracy.md](answer_accuracy.md), [../architecture/pipeline.md](../architecture/pipeline.md), [../architecture/decisions.md](../architecture/decisions.md)
 
 ## 요약
 모호한 질문은 `clarifier` 노드가 LangGraph `interrupt` 로 그래프를 멈추고 사용자에게 역질문(+선택지 chip)을 보낸다. 명확한 질문은 그대로 통과한다. HyDE(내부 확장)와 clarify(외부 역질문)의 하이브리드 — 상세 [answer_accuracy.md](answer_accuracy.md).

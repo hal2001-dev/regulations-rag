@@ -198,3 +198,13 @@
 - 신규 위키 `features/clarifier.md`(끊긴 링크 해소). 영향: `features/{retrieval,ingestion}.md`, `issues/resolved/ISSUE-001.md`, `troubleshooting/common.md`, `index.md`.
 - 설정: `.env` `RERANK_ENABLED=true`, `RERANK_CANDIDATE_K=60`, `RERANKER_MODEL=BAAI/bge-reranker-base`.
 - 출처: `packages/rag/{reranker,nodes/retriever_node,nodes/query_rewriter_node}.py`, `packages/regulation_parser/{structure,article_chunker}.py`, `apps/config.py`
+
+## [2026-06-08] build | 멀티턴 대화 참조 (최근 5턴) — 메모리 + 맥락 재검색
+- **배경**: conversations/messages 테이블은 있었으나 저장·참조 로직이 전혀 없어 각 질문이 독립 처리됨.
+- **저장/로드** (`repository.py`): `save_turn`(user+assistant 메시지 + conversation upsert), `get_recent_history(limit_turns=5)`. `query.py` `_persist_turn` 으로 턴 완료 시 저장(clarify 대기 중 미저장, resume 완료 시 저장), 질문 시 최근 5턴 로드 → `state.history`.
+- **노드 주입**: `generator_node`(history → Human/AI 메시지), `clarifier_node`(history 참조 → 후속/지시어 질문 통과, 역질문 억제), `query_rewriter_node`(history 로 HyDE 맥락 복원 → 검색 query 확장).
+- **검증**: Q2 "방금 뭘 물었나" → 이전 질문 기억 / Q2' "그럼 식비는?" → HyDE "국내 출장 2호 식비" 복원 → 별표 2 식비 행 검색 → "1일당 25,000원".
+- **한계**: reranker 는 원질문 사용(후속 질문 변별 약할 수 있음), clarifier 과민(ADR-019), router/authority 는 history 미사용.
+- 신규 위키: `features/conversation_memory.md`. 영향: `index.md`.
+- 커밋: `2b6ebf6`(메모리), `af2784d`(rewriter history).
+- 출처: `packages/db/repository.py`, `packages/rag/state.py`, `apps/routers/query.py`, `packages/rag/nodes/{clarifier,query_rewriter,generator}_node.py`

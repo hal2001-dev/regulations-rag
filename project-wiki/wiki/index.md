@@ -31,6 +31,7 @@ wiki 내 모든 페이지의 단일 카탈로그. 새로운 페이지를 추가�
 - [features/retrieval.md](features/retrieval.md) — ✅ M3 hybrid dense+sparse + RRF. **2026-06-08 cross-encoder reranker(bge-reranker-base) 연결 — 검색 정확도 핵심 ([ISSUE-001](issues/resolved/ISSUE-001.md))**
 - [features/generation.md](features/generation.md) — ✅ M3, gpt-4o-mini stream + 5-block prompt + citation_validator
 - [features/clarifier.md](features/clarifier.md) — ✅ M5, 4 패턴 LLM 감지 + interrupt_before + /query/resume
+- [features/conversation_memory.md](features/conversation_memory.md) — ✅ 2026-06-08, 멀티턴 대화 참조(최근 5턴) — 메모리 + 맥락 기반 재검색
 - [features/evaluation.md](features/evaluation.md) — ✅ M6, 30 golden queries + KPI 자동 측정 + ragas 옵션. baseline 기록.
 - [features/answer_accuracy.md](features/answer_accuracy.md) — ★ 규정·제도 질의 정확도 확보 방법 (위험 5종 → 방어 6단계 플레이북 + 질문 작성 가이드)
 
